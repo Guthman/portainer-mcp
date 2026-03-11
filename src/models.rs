@@ -13,6 +13,7 @@ where
 
 // ── Response models ──────────────────────────────────────────────────────────
 
+/// A Portainer stack (Docker Compose deployment).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Stack {
@@ -48,6 +49,7 @@ pub struct Stack {
     pub project_path: String,
 }
 
+/// A Portainer environment/endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Endpoint {
@@ -65,6 +67,7 @@ pub struct Endpoint {
     pub group_id: i64,
 }
 
+/// Response containing a stack's compose file content.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct StackFileResponse {
@@ -72,6 +75,7 @@ pub struct StackFileResponse {
     pub stack_file_content: String,
 }
 
+/// An environment variable from the Portainer API response.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct EnvVar {
@@ -79,6 +83,7 @@ pub struct EnvVar {
     pub value: Option<String>,
 }
 
+/// Git repository configuration for a git-based stack.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct GitConfig {
@@ -250,6 +255,7 @@ pub struct EnvVarInput {
 
 // ── Request body structs ─────────────────────────────────────────────────────
 
+/// Request body for creating a new standalone compose stack.
 #[derive(Debug, Serialize)]
 pub struct CreateStackBody {
     #[serde(rename = "Name")]
@@ -262,6 +268,7 @@ pub struct CreateStackBody {
     pub webhook: Option<String>,
 }
 
+/// Request body for updating an existing stack.
 #[derive(Debug, Serialize)]
 pub struct UpdateStackBody {
     #[serde(rename = "StackFileContent", skip_serializing_if = "Option::is_none")]
@@ -276,6 +283,7 @@ pub struct UpdateStackBody {
     pub rollback_to: Option<i64>,
 }
 
+/// Request body for redeploying a git-based stack.
 #[derive(Debug, Serialize)]
 pub struct RedeployGitStackBody {
     #[serde(rename = "Env", skip_serializing_if = "Option::is_none")]

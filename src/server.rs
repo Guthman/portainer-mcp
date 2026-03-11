@@ -21,6 +21,9 @@ use rmcp::{
 use crate::client::PortainerClient;
 use crate::models::*;
 
+/// MCP server that exposes Portainer stack management as tools, prompts, and resources.
+///
+/// Implements [`ServerHandler`] from rmcp and communicates over stdio using JSON-RPC.
 #[derive(Clone)]
 pub struct PortainerServer {
     tool_router: ToolRouter<Self>,

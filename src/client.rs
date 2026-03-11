@@ -4,6 +4,11 @@ use reqwest::{Client, Method, RequestBuilder};
 
 use crate::models::*;
 
+/// HTTP client for the Portainer REST API.
+///
+/// Authenticates via `X-API-KEY` header. Reads connection settings from
+/// environment variables on [`PortainerClient::new`], or accepts them
+/// explicitly via [`PortainerClient::with_config`].
 #[derive(Clone)]
 pub struct PortainerClient {
     client: Client,
@@ -18,6 +23,12 @@ impl Default for PortainerClient {
 }
 
 impl PortainerClient {
+    /// Create a client from environment variables (`PORTAINER_URL`,
+    /// `PORTAINER_API_KEY`, `PORTAINER_INSECURE`).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `PORTAINER_API_KEY` is not set.
     pub fn new() -> Self {
         let api_key = std::env::var("PORTAINER_API_KEY").expect("PORTAINER_API_KEY must be set");
         let base_url = std::env::var("PORTAINER_URL")
@@ -42,6 +53,7 @@ impl PortainerClient {
         }
     }
 
+    /// Create a client with explicit connection settings.
     pub fn with_config(url: &str, api_key: &str, insecure: bool) -> Self {
         let base_url = url.trim_end_matches('/').to_string();
         let client = Client::builder()
@@ -78,6 +90,7 @@ impl PortainerClient {
 
     // ── Typed methods ────────────────────────────────────────────────────────
 
+    /// List all stacks, optionally filtered by a JSON filter string.
     pub async fn list_stacks(&self, filters: Option<&str>) -> Result<Vec<Stack>, String> {
         let mut req = self.request(Method::GET, "stacks");
         if let Some(f) = filters {
@@ -91,6 +104,7 @@ impl PortainerClient {
         serde_json::from_str(&body).map_err(|e| format!("failed to parse stacks: {e}"))
     }
 
+    /// Get a single stack by ID.
     pub async fn get_stack(&self, id: i64) -> Result<Stack, String> {
         let resp = self
             .request(Method::GET, &format!("stacks/{id}"))
@@ -101,6 +115,7 @@ impl PortainerClient {
         serde_json::from_str(&body).map_err(|e| format!("failed to parse stack: {e}"))
     }
 
+    /// Get the compose file content of a stack, optionally at a specific version or commit.
     pub async fn get_stack_file(
         &self,
         id: i64,
@@ -122,6 +137,7 @@ impl PortainerClient {
         serde_json::from_str(&body).map_err(|e| format!("failed to parse stack file: {e}"))
     }
 
+    /// Create a new standalone compose stack from a string on the given endpoint.
     pub async fn create_stack(
         &self,
         endpoint_id: i64,
@@ -138,6 +154,7 @@ impl PortainerClient {
         serde_json::from_str(&resp_body).map_err(|e| format!("failed to parse created stack: {e}"))
     }
 
+    /// Update an existing stack's compose file, environment variables, or settings.
     pub async fn update_stack(
         &self,
         id: i64,
@@ -155,6 +172,7 @@ impl PortainerClient {
         serde_json::from_str(&resp_body).map_err(|e| format!("failed to parse updated stack: {e}"))
     }
 
+    /// Delete a stack. Optionally removes associated volumes.
     pub async fn delete_stack(
         &self,
         id: i64,
@@ -175,6 +193,7 @@ impl PortainerClient {
         Ok(())
     }
 
+    /// Start a stopped stack.
     pub async fn start_stack(&self, id: i64, endpoint_id: i64) -> Result<Stack, String> {
         let resp = self
             .request(Method::POST, &format!("stacks/{id}/start"))
@@ -186,6 +205,7 @@ impl PortainerClient {
         serde_json::from_str(&resp_body).map_err(|e| format!("failed to parse stack: {e}"))
     }
 
+    /// Stop a running stack.
     pub async fn stop_stack(&self, id: i64, endpoint_id: i64) -> Result<Stack, String> {
         let resp = self
             .request(Method::POST, &format!("stacks/{id}/stop"))
@@ -197,6 +217,7 @@ impl PortainerClient {
         serde_json::from_str(&resp_body).map_err(|e| format!("failed to parse stack: {e}"))
     }
 
+    /// Redeploy a git-based stack, pulling the latest changes from the repository.
     pub async fn redeploy_git_stack(
         &self,
         id: i64,
@@ -218,6 +239,7 @@ impl PortainerClient {
             .map_err(|e| format!("failed to parse redeployed stack: {e}"))
     }
 
+    /// List environments/endpoints with optional pagination and sorting.
     pub async fn list_endpoints(
         &self,
         start: Option<i64>,
@@ -246,6 +268,7 @@ impl PortainerClient {
         serde_json::from_str(&body).map_err(|e| format!("failed to parse endpoints: {e}"))
     }
 
+    /// Make a generic API request for any Portainer endpoint not covered by typed methods.
     pub async fn raw_request(
         &self,
         method: &str,
