@@ -59,7 +59,7 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           cd "target/${TARGET}/release"
-          tar -czf "../../../portainer-mcp-${REF_NAME}-${TARGET}.tar.gz" portainer-mcp
+          tar -czf "../../../portainer-stacks-${REF_NAME}-${TARGET}.tar.gz" portainer-stacks
 
       - name: Package (Windows)
         if: matrix.archive == 'zip'
@@ -68,10 +68,10 @@ jobs:
           TARGET: ${{ matrix.target }}
         run: |
           cd "target/${TARGET}/release"
-          7z a "../../../portainer-mcp-${REF_NAME}-${TARGET}.zip" portainer-mcp.exe
+          7z a "../../../portainer-stacks-${REF_NAME}-${TARGET}.zip" portainer-stacks.exe
 
       - name: Upload to release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          files: portainer-mcp-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
+          files: portainer-stacks-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
           prerelease: ${{ contains(github.ref_name, '-') }}

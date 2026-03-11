@@ -225,6 +225,20 @@ pub struct GenericRequestParams {
     pub query_params: Option<HashMap<String, String>>,
 }
 
+/// Parameters for troubleshooting a stack.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct TroubleshootStackParams {
+    /// Stack identifier.
+    pub stack_id: i64,
+}
+
+/// Parameters for the deploy guide prompt.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct DeployGuideParams {
+    /// Environment/endpoint identifier to deploy to.
+    pub endpoint_id: i64,
+}
+
 /// An environment variable with name and value.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EnvVarInput {

@@ -1,6 +1,6 @@
 //! Smoke test — run with PORTAINER_URL and PORTAINER_API_KEY set in the Run Configuration.
 
-use portainer_mcp::client::PortainerClient;
+use portainer_stacks::client::PortainerClient;
 
 #[tokio::test]
 async fn list_endpoints_and_stacks() {

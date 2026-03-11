@@ -12,9 +12,9 @@ async fn main() -> anyhow::Result<()> {
         .with_ansi(false)
         .init();
 
-    tracing::info!("Starting Portainer MCP server");
+    tracing::info!("Starting portainer-stacks MCP server");
 
-    let service = portainer_mcp::server::PortainerServer::new()
+    let service = portainer_stacks::server::PortainerServer::new()
         .serve(stdio())
         .await?;
     service.waiting().await?;

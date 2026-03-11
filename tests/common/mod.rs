@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use portainer_mcp::client::PortainerClient;
+use portainer_stacks::client::PortainerClient;
 use testcontainers::{
     ContainerAsync, GenericImage, ImageExt,
     core::{IntoContainerPort, Mount, WaitFor},

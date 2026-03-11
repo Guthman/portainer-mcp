@@ -1,6 +1,6 @@
 mod common;
 
-use portainer_mcp::models::{CreateStackBody, UpdateStackBody};
+use portainer_stacks::models::{CreateStackBody, UpdateStackBody};
 
 const COMPOSE_FILE: &str = r#"version: "3"
 services:

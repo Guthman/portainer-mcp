@@ -1,13 +1,23 @@
 # portainer-mcp
 
-An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose stacks on a [Portainer](https://www.portainer.io/) instance. Exposes 10 typed tools for common stack operations plus a generic fallback for full API access.
+An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose stacks on a [Portainer](https://www.portainer.io/) instance. Built against the Portainer 2.39.0 API spec. Exposes 10 typed tools for common stack operations plus a generic fallback for full API access.
+
+> For broader Portainer coverage beyond stack management, see the official [portainer/portainer-mcp](https://github.com/portainer/portainer-mcp).
+
+## Why this server?
+
+- **Minimal and focused** — purpose-built for stack management
+- **Single static binary** — no runtime, no `node_modules`, trivial to install from [pre-built releases](https://github.com/Guthman/portainer-mcp/releases)
+- **Low memory footprint** — a few MB vs Node's ~30-50MB baseline; ideal for a process that sits idle between tool calls
+- **Instant startup** — no module loading delay; relevant since MCP hosts may spawn/kill the process per session
+- **MCP-native** — includes tool annotations, prompts, and resources
 
 ## Features
 
 - List, inspect, create, update, and delete compose stacks
 - Start, stop, and git-redeploy stacks
 - List environments/endpoints
-- Generic request tool for any Portainer API endpoint
+- Generic request tool for any Portainer API endpoint — if a dedicated tool doesn't cover your use case, the fallback `portainer_request` tool gives full access to the entire Portainer API
 - API key authentication (no login flow needed)
 - Optional self-signed certificate support
 
@@ -99,6 +109,10 @@ Add to your `.mcp.json`:
 2. `list_stacks` — see your stacks
 3. `get_stack_file` — inspect a stack's compose file
 4. `update_stack` / `redeploy_git_stack` — make changes
+
+## Roadmap
+
+- Automatic tool updates when new Portainer API versions are released
 
 ## License
 
