@@ -1,4 +1,4 @@
-# portainer-mcp
+# portainer-stacks
 
 An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose stacks on a [Portainer](https://www.portainer.io/) instance. Built against the Portainer 2.39.0 API spec. Exposes 10 typed tools for common stack operations plus a generic fallback for full API access.
 
@@ -31,7 +31,7 @@ cd portainer-mcp
 cargo build --release
 ```
 
-The binary will be at `target/release/portainer-mcp` (or `portainer-mcp.exe` on Windows).
+The binary will be at `target/release/portainer-stacks` (or `portainer-stacks.exe` on Windows).
 
 ### Pre-built binaries
 
@@ -57,7 +57,7 @@ Add to your Claude Desktop MCP config (`claude_desktop_config.json`):
 {
   "mcpServers": {
     "portainer": {
-      "command": "path/to/portainer-mcp",
+      "command": "path/to/portainer-stacks",
       "env": {
         "PORTAINER_URL": "https://your-portainer:9443",
         "PORTAINER_API_KEY": "your-api-key",
@@ -76,7 +76,7 @@ Add to your `.mcp.json`:
 {
   "mcpServers": {
     "portainer": {
-      "command": "path/to/portainer-mcp",
+      "command": "path/to/portainer-stacks",
       "env": {
         "PORTAINER_URL": "https://your-portainer:9443",
         "PORTAINER_API_KEY": "your-api-key",
@@ -113,6 +113,7 @@ Add to your `.mcp.json`:
 ## Roadmap
 
 - Automatic tool updates when new Portainer API versions are released
+- Support for more auth methods or credential handling? Better prompts? Let me know!
 
 ## License
 
