@@ -25,7 +25,7 @@ The binary will be at `target/release/portainer-mcp` (or `portainer-mcp.exe` on 
 
 ### Pre-built binaries
 
-Check [Releases](https://github.com/YOUR_USERNAME/portainer-mcp/releases) for pre-built binaries.
+Check [Releases](https://github.com/Guthman/portainer-mcp/releases) for pre-built binaries.
 
 ## Configuration
 
