@@ -38,6 +38,20 @@ The binary will be at `target/release/portainer-stacks` (or `portainer-stacks.ex
 
 Check [Releases](https://github.com/Guthman/portainer-mcp/releases) for pre-built binaries.
 
+### Verifying what you run
+
+When you configure any MCP server, you're telling your AI assistant to run a binary on your machine with whatever permissions you give it. If that binary gets swapped out — a bad download, a compromised update, or something modifying it on disk — the assistant will run the replacement without question. Most MCP configurations don't have a built-in way to pin to a specific binary hash, so it's worth verifying the file yourself.
+
+This applies to all MCP servers, not just this one.
+
+Release binaries for this project include [GitHub Artifact Attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) — signed provenance records that confirm a binary was built by this repo's CI from a specific commit. To verify a downloaded artifact:
+
+```sh
+gh attestation verify portainer-stacks-v*.tar.gz --owner Guthman
+```
+
+If verification passes, the binary is untampered and matches what the source code produced. It doesn't guarantee the code itself is safe — you should still review what you run — but it closes the gap between "code in the repo" and "binary on your machine."
+
 ## Configuration
 
 Set these environment variables:
