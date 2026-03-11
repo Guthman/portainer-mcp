@@ -7,6 +7,7 @@ An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose st
 ## Why this server?
 
 - **Minimal and focused** — purpose-built for stack management
+- **Windows, Linux & macOS (arm64 and x86_64)**
 - **Single static binary** — no runtime, no `node_modules`, trivial to install from [pre-built releases](https://github.com/Guthman/portainer-mcp/releases)
 - **Low memory footprint** — a few MB vs Node's ~30-50MB baseline; ideal for a process that sits idle between tool calls
 - **Instant startup** — no module loading delay; relevant since MCP hosts may spawn/kill the process per session
@@ -113,6 +114,7 @@ Add to your `.mcp.json`:
 ## Roadmap
 
 - Automatic tool updates when new Portainer API versions are released
+- Secure handling of sensitive data returned by the Portainer API to prevent sending sensitive data to the LLM
 - Support for more auth methods or credential handling? Better prompts? Let me know!
 
 ## License
