@@ -1,0 +1,45 @@
+version: 2
+
+updates:
+  # ──────────────────────────────────────────────
+  # GitHub Actions — weekly, Monday
+  # ──────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      timezone: "Europe/Amsterdam"
+    commit-message:
+      prefix: "chore(deps):"
+    labels:
+      - "dependencies"
+    groups:
+      github-actions-all:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+
+  # ──────────────────────────────────────────────
+  # Cargo crates — weekly, Wednesday
+  # ──────────────────────────────────────────────
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      timezone: "Europe/Amsterdam"
+    commit-message:
+      prefix: "chore(deps):"
+    labels:
+      - "dependencies"
+    groups:
+      cargo-all:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+      semver-major-days: 7
+    open-pull-requests-limit: 5
