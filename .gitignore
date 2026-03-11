@@ -1,0 +1,10 @@
+/target
+.claude
+.serena
+.idea
+.run
+.mcp.json
+.env
+docs/
+CLAUDE.md
+.private

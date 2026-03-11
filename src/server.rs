@@ -8,11 +8,11 @@ use rmcp::{
         wrapper::Parameters,
     },
     model::{
-        AnnotateAble, CallToolResult, Content, GetPromptRequestParam, GetPromptResult,
+        AnnotateAble, CallToolResult, Content, GetPromptRequestParams, GetPromptResult,
         ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, LoggingLevel,
-        LoggingMessageNotificationParam, PaginatedRequestParam, PromptMessage, PromptMessageRole,
-        RawResource, RawResourceTemplate, ReadResourceRequestParam, ReadResourceResult,
-        ResourceContents, ServerCapabilities, ServerInfo, SetLevelRequestParam,
+        LoggingMessageNotificationParam, PaginatedRequestParams, PromptMessage, PromptMessageRole,
+        RawResource, RawResourceTemplate, ReadResourceRequestParams, ReadResourceResult,
+        ResourceContents, ServerCapabilities, ServerInfo, SetLevelRequestParams,
     },
     prompt, prompt_handler, prompt_router,
     service::{Peer, RequestContext, RoleServer},
@@ -422,10 +422,11 @@ impl PortainerServer {
              6. Best practices (image tags, restart policies, health checks)"
         );
 
-        Ok(GetPromptResult {
-            description: Some("Troubleshoot a Portainer stack".to_string()),
-            messages: vec![PromptMessage::new_text(PromptMessageRole::User, message)],
-        })
+        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            message,
+        )])
+        .with_description("Troubleshoot a Portainer stack"))
     }
 
     #[prompt(
@@ -474,10 +475,11 @@ impl PortainerServer {
             params.endpoint_id
         );
 
-        Ok(GetPromptResult {
-            description: Some("Guide for deploying a new stack".to_string()),
-            messages: vec![PromptMessage::new_text(PromptMessageRole::User, message)],
-        })
+        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            message,
+        )])
+        .with_description("Guide for deploying a new stack"))
     }
 
     #[prompt(
@@ -648,12 +650,11 @@ impl PortainerServer {
             note = note_section,
         );
 
-        Ok(GetPromptResult {
-            description: Some(
-                "Scan environment variables and guide security configuration".to_string(),
-            ),
-            messages: vec![PromptMessage::new_text(PromptMessageRole::User, message)],
-        })
+        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            message,
+        )])
+        .with_description("Scan environment variables and guide security configuration"))
     }
 
     #[prompt(
@@ -716,10 +717,11 @@ impl PortainerServer {
              3. Recommendations for improvements or issues to address"
         );
 
-        Ok(GetPromptResult {
-            description: Some("Full infrastructure overview".to_string()),
-            messages: vec![PromptMessage::new_text(PromptMessageRole::User, message)],
-        })
+        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
+            PromptMessageRole::User,
+            message,
+        )])
+        .with_description("Full infrastructure overview"))
     }
 }
 
@@ -774,34 +776,33 @@ impl ServerHandler for PortainerServer {
             }
         };
 
-        ServerInfo {
-            instructions: Some(format!(
-                "Portainer stack management server. Manages Docker Compose stacks on a Portainer instance.\n\
-                     \n\
-                     Recommended workflow:\n\
-                     1. Call list_endpoints first to get the endpoint_id for your environment.\n\
-                     2. Call list_stacks to see available stacks.\n\
-                     3. Use get_stack or get_stack_file to inspect a stack.\n\
-                     4. Use create/update/delete/start/stop/redeploy tools to manage stacks.\n\
-                     5. Use portainer_request for any Portainer API endpoint not covered above.\n\
-                     \n\
-                     Environment variable display mode: {label}. {mode_note}",
-                label = mode.label(),
-                mode_note = mode_note,
-            )),
-            capabilities: ServerCapabilities::builder()
+        ServerInfo::new(
+            ServerCapabilities::builder()
                 .enable_tools()
                 .enable_prompts()
                 .enable_resources()
                 .enable_logging()
                 .build(),
-            ..Default::default()
-        }
+        )
+        .with_instructions(format!(
+            "Portainer stack management server. Manages Docker Compose stacks on a Portainer instance.\n\
+                 \n\
+                 Recommended workflow:\n\
+                 1. Call list_endpoints first to get the endpoint_id for your environment.\n\
+                 2. Call list_stacks to see available stacks.\n\
+                 3. Use get_stack or get_stack_file to inspect a stack.\n\
+                 4. Use create/update/delete/start/stop/redeploy tools to manage stacks.\n\
+                 5. Use portainer_request for any Portainer API endpoint not covered above.\n\
+                 \n\
+                 Environment variable display mode: {label}. {mode_note}",
+            label = mode.label(),
+            mode_note = mode_note,
+        ))
     }
 
     async fn list_resources(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, McpError> {
         self.send_log(
@@ -812,37 +813,22 @@ impl ServerHandler for PortainerServer {
         )
         .await;
 
-        let endpoints = RawResource {
-            uri: "portainer://endpoints".to_string(),
-            name: "endpoints".to_string(),
-            title: None,
-            description: Some("All environments/endpoints".to_string()),
-            mime_type: Some("application/json".to_string()),
-            size: None,
-            icons: None,
-        }
-        .no_annotation();
+        let endpoints = RawResource::new("portainer://endpoints", "endpoints")
+            .with_description("All environments/endpoints")
+            .with_mime_type("application/json")
+            .no_annotation();
 
-        let stacks = RawResource {
-            uri: "portainer://stacks".to_string(),
-            name: "stacks".to_string(),
-            title: None,
-            description: Some("All stacks".to_string()),
-            mime_type: Some("application/json".to_string()),
-            size: None,
-            icons: None,
-        }
-        .no_annotation();
+        let stacks = RawResource::new("portainer://stacks", "stacks")
+            .with_description("All stacks")
+            .with_mime_type("application/json")
+            .no_annotation();
 
-        Ok(ListResourcesResult {
-            next_cursor: None,
-            resources: vec![endpoints, stacks],
-        })
+        Ok(ListResourcesResult::with_all_items(vec![endpoints, stacks]))
     }
 
     async fn list_resource_templates(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<ListResourceTemplatesResult, McpError> {
         self.send_log(
@@ -853,33 +839,25 @@ impl ServerHandler for PortainerServer {
         )
         .await;
 
-        let stack = RawResourceTemplate {
-            uri_template: "portainer://stacks/{stack_id}".to_string(),
-            name: "stack".to_string(),
-            title: None,
-            description: Some("Single stack details".to_string()),
-            mime_type: Some("application/json".to_string()),
-        }
-        .no_annotation();
+        let stack = RawResourceTemplate::new("portainer://stacks/{stack_id}", "stack")
+            .with_description("Single stack details")
+            .with_mime_type("application/json")
+            .no_annotation();
 
-        let compose = RawResourceTemplate {
-            uri_template: "portainer://stacks/{stack_id}/compose".to_string(),
-            name: "stack-compose".to_string(),
-            title: None,
-            description: Some("Stack compose file".to_string()),
-            mime_type: Some("application/x-yaml".to_string()),
-        }
-        .no_annotation();
+        let compose =
+            RawResourceTemplate::new("portainer://stacks/{stack_id}/compose", "stack-compose")
+                .with_description("Stack compose file")
+                .with_mime_type("application/x-yaml")
+                .no_annotation();
 
-        Ok(ListResourceTemplatesResult {
-            next_cursor: None,
-            resource_templates: vec![stack, compose],
-        })
+        Ok(ListResourceTemplatesResult::with_all_items(vec![
+            stack, compose,
+        ]))
     }
 
     async fn read_resource(
         &self,
-        request: ReadResourceRequestParam,
+        request: ReadResourceRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, McpError> {
         let uri = &request.uri;
@@ -900,27 +878,27 @@ impl ServerHandler for PortainerServer {
                 .map_err(err)?;
             let text = serde_json::to_string_pretty(&endpoints)
                 .map_err(|e| err(format!("JSON serialization failed: {e}")))?;
-            Ok(ReadResourceResult {
-                contents: vec![ResourceContents::TextResourceContents {
+            Ok(ReadResourceResult::new(vec![
+                ResourceContents::TextResourceContents {
                     uri: uri.clone(),
                     mime_type: Some("application/json".to_string()),
                     text,
                     meta: None,
-                }],
-            })
+                },
+            ]))
         } else if uri == "portainer://stacks" {
             let mut stacks = self.client.list_stacks(None).await.map_err(err)?;
             redact::redact_stacks(&mut stacks, &self.redact_config);
             let text = serde_json::to_string_pretty(&stacks)
                 .map_err(|e| err(format!("JSON serialization failed: {e}")))?;
-            Ok(ReadResourceResult {
-                contents: vec![ResourceContents::TextResourceContents {
+            Ok(ReadResourceResult::new(vec![
+                ResourceContents::TextResourceContents {
                     uri: uri.clone(),
                     mime_type: Some("application/json".to_string()),
                     text,
                     meta: None,
-                }],
-            })
+                },
+            ]))
         } else if let Some(rest) = uri.strip_prefix("portainer://stacks/") {
             if let Some(id_str) = rest.strip_suffix("/compose") {
                 let id: i64 = id_str.parse().map_err(|_| {
@@ -931,14 +909,14 @@ impl ServerHandler for PortainerServer {
                     .get_stack_file(id, None, None)
                     .await
                     .map_err(err)?;
-                Ok(ReadResourceResult {
-                    contents: vec![ResourceContents::TextResourceContents {
+                Ok(ReadResourceResult::new(vec![
+                    ResourceContents::TextResourceContents {
                         uri: uri.clone(),
                         mime_type: Some("application/x-yaml".to_string()),
                         text: file.stack_file_content,
                         meta: None,
-                    }],
-                })
+                    },
+                ]))
             } else {
                 let id: i64 = rest.parse().map_err(|_| {
                     McpError::invalid_params(format!("Invalid stack ID: {rest}"), None)
@@ -947,14 +925,14 @@ impl ServerHandler for PortainerServer {
                 redact::redact_stack(&mut stack, &self.redact_config);
                 let text = serde_json::to_string_pretty(&stack)
                     .map_err(|e| err(format!("JSON serialization failed: {e}")))?;
-                Ok(ReadResourceResult {
-                    contents: vec![ResourceContents::TextResourceContents {
+                Ok(ReadResourceResult::new(vec![
+                    ResourceContents::TextResourceContents {
                         uri: uri.clone(),
                         mime_type: Some("application/json".to_string()),
                         text,
                         meta: None,
-                    }],
-                })
+                    },
+                ]))
             }
         } else {
             Err(McpError::invalid_params(
@@ -966,11 +944,42 @@ impl ServerHandler for PortainerServer {
 
     async fn set_level(
         &self,
-        request: SetLevelRequestParam,
+        request: SetLevelRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<(), McpError> {
         let mut guard = self.log_level.write().expect("log_level lock poisoned");
         *guard = Some(request.level);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_info() {
+        // PortainerClient::new() reads PORTAINER_API_KEY from env.
+        // SAFETY: test runs single-threaded; no concurrent env access.
+        unsafe { std::env::set_var("PORTAINER_API_KEY", "test-key") };
+        let server = PortainerServer::new();
+        let info = server.get_info();
+
+        assert!(info.instructions.as_ref().unwrap().contains("Portainer"));
+        assert!(info.capabilities.tools.is_some());
+        assert!(info.capabilities.prompts.is_some());
+        assert!(info.capabilities.resources.is_some());
+        assert!(info.capabilities.logging.is_some());
+    }
+
+    #[test]
+    fn test_log_level_ordinal() {
+        assert!(log_level_ordinal(LoggingLevel::Debug) < log_level_ordinal(LoggingLevel::Info));
+        assert!(log_level_ordinal(LoggingLevel::Info) < log_level_ordinal(LoggingLevel::Warning));
+        assert!(log_level_ordinal(LoggingLevel::Warning) < log_level_ordinal(LoggingLevel::Error));
+        assert!(
+            log_level_ordinal(LoggingLevel::Error) < log_level_ordinal(LoggingLevel::Emergency)
+        );
+        assert_eq!(log_level_ordinal(LoggingLevel::Emergency), 7);
     }
 }
