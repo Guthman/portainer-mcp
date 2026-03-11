@@ -5,19 +5,32 @@ on:
     tags:
       - "v*"
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
+permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
   build:
     name: Build (${{ matrix.target }})
+    needs: create-release
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-latest
@@ -74,7 +87,7 @@ jobs:
           7z a "../../../portainer-stacks-${REF_NAME}-${TARGET}.zip" portainer-stacks.exe
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-path: portainer-stacks-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
 
@@ -82,4 +95,3 @@ jobs:
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           files: portainer-stacks-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
-          prerelease: ${{ contains(github.ref_name, '-') }}
