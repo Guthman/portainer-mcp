@@ -61,6 +61,23 @@ Set these environment variables:
 | `PORTAINER_API_KEY` | Yes | — | Portainer API key ([how to create one](https://docs.portainer.io/api/access)) |
 | `PORTAINER_URL` | No | `http://localhost:9000` | Portainer instance URL |
 | `PORTAINER_INSECURE` | No | `false` | Set to `true` to accept self-signed TLS certificates |
+| `PORTAINER_ENV_DISPLAY` | No | `masked` | How env var values appear in responses: `masked` (all hidden), `filtered` (sensitive redacted), `full` (all visible) |
+| `PORTAINER_SENSITIVE_NAMES` | No | — | Comma-separated env var names to **add** as sensitive in `filtered` mode |
+| `PORTAINER_VISIBLE_NAMES` | No | — | Comma-separated env var names to **force** visible in `filtered` mode |
+
+### Environment variable display modes
+
+Stack objects returned by the Portainer API include environment variables that often contain secrets (passwords, API keys, tokens, connection strings). By default, all values are masked before they reach the LLM.
+
+| Mode | Behavior |
+|------|----------|
+| `masked` | All env var values → `[MASKED]` |
+| `filtered` | Names matching sensitive patterns → `[REDACTED]`, others shown |
+| `full` | All values in cleartext (use with caution) |
+
+In `filtered` mode, names matching built-in patterns (PASSWORD, SECRET, TOKEN, etc.) and any names listed in `PORTAINER_SENSITIVE_NAMES` are redacted. Names in `PORTAINER_VISIBLE_NAMES` override both, so you can exempt specific variables. Priority: explicit visible > explicit sensitive > built-in pattern.
+
+Use the `configure-env-display` prompt to scan your stacks and get personalized guidance.
 
 ## Usage
 
@@ -76,7 +93,8 @@ Add to your Claude Desktop MCP config (`claude_desktop_config.json`):
       "env": {
         "PORTAINER_URL": "https://your-portainer:9443",
         "PORTAINER_API_KEY": "your-api-key",
-        "PORTAINER_INSECURE": "true"
+        "PORTAINER_INSECURE": "true",
+        "PORTAINER_ENV_DISPLAY": "masked"
       }
     }
   }
@@ -95,7 +113,8 @@ Add to your `.mcp.json`:
       "env": {
         "PORTAINER_URL": "https://your-portainer:9443",
         "PORTAINER_API_KEY": "your-api-key",
-        "PORTAINER_INSECURE": "true"
+        "PORTAINER_INSECURE": "true",
+        "PORTAINER_ENV_DISPLAY": "masked"
       }
     }
   }
@@ -128,7 +147,6 @@ Add to your `.mcp.json`:
 ## Roadmap
 
 - Automatic tool updates when new Portainer API versions are released
-- Secure handling of sensitive data returned by the Portainer API to prevent sending sensitive data to the LLM
 - Support for more auth methods or credential handling? Better prompts? Let me know!
 
 ## License

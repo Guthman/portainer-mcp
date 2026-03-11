@@ -15,4 +15,5 @@
 
 pub mod client;
 pub mod models;
+pub mod redact;
 pub mod server;

@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 
 use rmcp::{
@@ -20,6 +21,7 @@ use rmcp::{
 
 use crate::client::PortainerClient;
 use crate::models::*;
+use crate::redact::{self, EnvDisplayMode, RedactConfig};
 
 /// MCP server that exposes Portainer stack management as tools, prompts, and resources.
 ///
@@ -30,6 +32,7 @@ pub struct PortainerServer {
     prompt_router: PromptRouter<Self>,
     client: PortainerClient,
     log_level: Arc<RwLock<Option<LoggingLevel>>>,
+    redact_config: RedactConfig,
 }
 
 fn success_json<T: serde::Serialize>(value: &T) -> Result<CallToolResult, McpError> {
@@ -69,6 +72,7 @@ impl PortainerServer {
             prompt_router: Self::prompt_router(),
             client: PortainerClient::new(),
             log_level: Arc::new(RwLock::new(None)),
+            redact_config: RedactConfig::from_env(),
         }
     }
 
@@ -86,11 +90,12 @@ impl PortainerServer {
         &self,
         Parameters(params): Parameters<ListStacksParams>,
     ) -> Result<CallToolResult, McpError> {
-        let stacks = self
+        let mut stacks = self
             .client
             .list_stacks(params.filters.as_deref())
             .await
             .map_err(err)?;
+        redact::redact_stacks(&mut stacks, &self.redact_config);
         success_json(&stacks)
     }
 
@@ -108,7 +113,8 @@ impl PortainerServer {
         &self,
         Parameters(params): Parameters<GetStackParams>,
     ) -> Result<CallToolResult, McpError> {
-        let stack = self.client.get_stack(params.id).await.map_err(err)?;
+        let mut stack = self.client.get_stack(params.id).await.map_err(err)?;
+        redact::redact_stack(&mut stack, &self.redact_config);
         success_json(&stack)
     }
 
@@ -154,11 +160,12 @@ impl PortainerServer {
             env: params.env,
             webhook: params.webhook,
         };
-        let stack = self
+        let mut stack = self
             .client
             .create_stack(params.endpoint_id, &body)
             .await
             .map_err(err)?;
+        redact::redact_stack(&mut stack, &self.redact_config);
         success_json(&stack)
     }
 
@@ -183,11 +190,12 @@ impl PortainerServer {
             pull_image: params.pull_image,
             rollback_to: params.rollback_to,
         };
-        let stack = self
+        let mut stack = self
             .client
             .update_stack(params.id, params.endpoint_id, &body)
             .await
             .map_err(err)?;
+        redact::redact_stack(&mut stack, &self.redact_config);
         success_json(&stack)
     }
 
@@ -229,11 +237,12 @@ impl PortainerServer {
         &self,
         Parameters(params): Parameters<StartStackParams>,
     ) -> Result<CallToolResult, McpError> {
-        let stack = self
+        let mut stack = self
             .client
             .start_stack(params.id, params.endpoint_id)
             .await
             .map_err(err)?;
+        redact::redact_stack(&mut stack, &self.redact_config);
         success_json(&stack)
     }
 
@@ -251,11 +260,12 @@ impl PortainerServer {
         &self,
         Parameters(params): Parameters<StopStackParams>,
     ) -> Result<CallToolResult, McpError> {
-        let stack = self
+        let mut stack = self
             .client
             .stop_stack(params.id, params.endpoint_id)
             .await
             .map_err(err)?;
+        redact::redact_stack(&mut stack, &self.redact_config);
         success_json(&stack)
     }
 
@@ -279,11 +289,12 @@ impl PortainerServer {
             repository_reference_name: params.repository_reference_name,
             pull_image: params.pull_image,
         };
-        let stack = self
+        let mut stack = self
             .client
             .redeploy_git_stack(params.id, params.endpoint_id, &body)
             .await
             .map_err(err)?;
+        redact::redact_stack(&mut stack, &self.redact_config);
         success_json(&stack)
     }
 
@@ -316,7 +327,7 @@ impl PortainerServer {
 
     /// Make a generic Portainer API request for endpoints not covered by other tools.
     #[tool(
-        description = "Make a generic Portainer API request. Use this for any endpoint not covered by the specific tools above.\n\nArgs:\n  method: HTTP method (GET, POST, PUT, DELETE, PATCH).\n  path: API path after /api/, e.g. \"status\" or \"endpoints/1/docker/containers/json\".\n  body: Optional JSON request body.\n  query_params: Optional query string parameters.\n\nReturns: JSON with status_code, headers, and body from the API response.",
+        description = "Make a generic Portainer API request. Use this for any endpoint not covered by the specific tools above.\n\nWARNING: Responses are returned as-is with no env var redaction. Avoid querying endpoints that return sensitive data.\n\nArgs:\n  method: HTTP method (GET, POST, PUT, DELETE, PATCH).\n  path: API path after /api/, e.g. \"status\" or \"endpoints/1/docker/containers/json\".\n  body: Optional JSON request body.\n  query_params: Optional query string parameters.\n\nReturns: JSON with status_code, headers, and body from the API response.",
         annotations(
             read_only_hint = false,
             destructive_hint = true,
@@ -470,6 +481,182 @@ impl PortainerServer {
     }
 
     #[prompt(
+        name = "configure-env-display",
+        description = "Scan all stacks for environment variable names and guide security configuration."
+    )]
+    async fn configure_env_display(&self) -> Result<GetPromptResult, McpError> {
+        let mode = self.redact_config.mode();
+
+        // Show active custom overrides if any are configured.
+        let custom_section = {
+            let sens = self.redact_config.custom_sensitive_names();
+            let vis = self.redact_config.custom_visible_names();
+            if sens.is_empty() && vis.is_empty() {
+                String::new()
+            } else {
+                let mut parts = Vec::new();
+                if !sens.is_empty() {
+                    let mut names: Vec<&str> = sens.iter().map(|s| s.as_str()).collect();
+                    names.sort();
+                    parts.push(format!(
+                        "Custom sensitive names: {}",
+                        names
+                            .iter()
+                            .map(|n| format!("`{n}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                if !vis.is_empty() {
+                    let mut names: Vec<&str> = vis.iter().map(|s| s.as_str()).collect();
+                    names.sort();
+                    parts.push(format!(
+                        "Custom visible names: {}",
+                        names
+                            .iter()
+                            .map(|n| format!("`{n}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                format!("\n{}\n", parts.join("\n"))
+            }
+        };
+
+        // Fetch stacks to scan env var names (values are never included in the prompt).
+        let (scan_section, note_section) = match self.client.list_stacks(None).await {
+            Ok(stacks) => {
+                let mut sensitive: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+                let mut visible: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+
+                for stack in &stacks {
+                    for var in &stack.env {
+                        if let Some(name) = &var.name {
+                            let map = if self.redact_config.should_redact(name) {
+                                &mut sensitive
+                            } else {
+                                &mut visible
+                            };
+                            map.entry(name.clone())
+                                .or_default()
+                                .insert(stack.name.clone());
+                        }
+                    }
+                }
+
+                let total = sensitive.len() + visible.len();
+                let fmt_list = |vars: &BTreeMap<String, BTreeSet<String>>| -> String {
+                    if vars.is_empty() {
+                        return "  (none)\n".to_string();
+                    }
+                    vars.iter()
+                        .map(|(name, stacks)| {
+                            let names: Vec<&str> = stacks.iter().map(|s| s.as_str()).collect();
+                            format!("  - `{}` (in: {})", name, names.join(", "))
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+
+                let scan = format!(
+                    "Scanned {} stack(s), found {} unique environment variable name(s).\n\n\
+                     ### Flagged as sensitive ({}) — REDACTED in `filtered` mode\n{}\n\n\
+                     ### Not flagged ({}) — VISIBLE in `filtered` mode\n{}",
+                    stacks.len(),
+                    total,
+                    sensitive.len(),
+                    fmt_list(&sensitive),
+                    visible.len(),
+                    fmt_list(&visible),
+                );
+
+                let note = if !visible.is_empty() {
+                    "\n\n**Review the \"not flagged\" list above.** If any contain sensitive \
+                     data, add them to `PORTAINER_SENSITIVE_NAMES` in your MCP config."
+                        .to_string()
+                } else {
+                    String::new()
+                };
+
+                (scan, note)
+            }
+            Err(e) => (
+                format!(
+                    "Could not scan stacks: {e}\n\nYou can still configure the mode — \
+                         the setting applies once the server can reach Portainer."
+                ),
+                String::new(),
+            ),
+        };
+
+        let message = format!(
+            "Help me configure environment variable security for my Portainer MCP server.\n\n\
+             ## Current Mode\n\
+             `{mode}` — {desc}\
+             {custom}\n\n\
+             ## Scan Results\n\
+             {scan}\
+             {note}\n\n\
+             ## Configuration\n\
+             Update your MCP server configuration:\n\n\
+             ### Claude Desktop (`claude_desktop_config.json`)\n\
+             ```json\n\
+             {{\n  \
+               \"mcpServers\": {{\n    \
+                 \"portainer\": {{\n      \
+                   \"command\": \"path/to/portainer-stacks\",\n      \
+                   \"env\": {{\n        \
+                     \"PORTAINER_URL\": \"https://your-portainer:9443\",\n        \
+                     \"PORTAINER_API_KEY\": \"your-api-key\",\n        \
+                     \"PORTAINER_ENV_DISPLAY\": \"filtered\",\n        \
+                     \"PORTAINER_SENSITIVE_NAMES\": \"MY_INTERNAL_URL,CUSTOM_CONN\",\n        \
+                     \"PORTAINER_VISIBLE_NAMES\": \"\"\n      \
+                   }}\n    \
+                 }}\n  \
+               }}\n\
+             }}\n\
+             ```\n\n\
+             ### Claude Code (`.mcp.json`)\n\
+             Same format as above.\n\n\
+             ## Available Modes\n\
+             | Mode | Behavior |\n\
+             |---|---|\n\
+             | `masked` (default) | All env var values → `[MASKED]` |\n\
+             | `filtered` | Sensitive patterns → `[REDACTED]`, others shown |\n\
+             | `full` | All values in cleartext (use with caution) |\n\n\
+             ## Custom Overrides\n\
+             | Variable | Purpose |\n\
+             |---|---|\n\
+             | `PORTAINER_SENSITIVE_NAMES` | Comma-separated names to **add** as sensitive |\n\
+             | `PORTAINER_VISIBLE_NAMES` | Comma-separated names to **force** visible |\n\n\
+             Priority: explicit visible > explicit sensitive > built-in pattern match.\n\n\
+             ## Built-in Sensitive Patterns\n\
+             Names are flagged if they contain: `PASSWORD`, `PASSWD`, `SECRET`, `TOKEN`, \
+             `CREDENTIAL`, `PRIVATE_KEY`, `API_KEY`, `DATABASE_URL`, `CONNECTION_STRING` \
+             — or end with `_KEY` or `_DSN`.\n\n\
+             **Note:** The generic `portainer_request` tool returns raw API responses and \
+             does not apply redaction.\n\n\
+             Please review the scan results and advise:\n\
+             1. Are any \"not flagged\" variables actually sensitive and should be added to \
+             `PORTAINER_SENSITIVE_NAMES`?\n\
+             2. Which mode do you recommend for my environment?\n\
+             3. Help me build the final MCP configuration.",
+            mode = mode.label(),
+            desc = mode.description(),
+            custom = custom_section,
+            scan = scan_section,
+            note = note_section,
+        );
+
+        Ok(GetPromptResult {
+            description: Some(
+                "Scan environment variables and guide security configuration".to_string(),
+            ),
+            messages: vec![PromptMessage::new_text(PromptMessageRole::User, message)],
+        })
+    }
+
+    #[prompt(
         name = "stack-overview",
         description = "Fetch all endpoints and stacks for a full infrastructure overview."
     )]
@@ -571,18 +758,37 @@ impl PortainerServer {
 #[prompt_handler]
 impl ServerHandler for PortainerServer {
     fn get_info(&self) -> ServerInfo {
+        let mode = self.redact_config.mode();
+        let mode_note = match mode {
+            EnvDisplayMode::Masked => {
+                "Environment variable values in stack responses are MASKED. \
+                Use the configure-env-display prompt to review and adjust."
+            }
+            EnvDisplayMode::Filtered => {
+                "Environment variable values matching sensitive patterns \
+                are REDACTED. Non-sensitive values are shown in cleartext."
+            }
+            EnvDisplayMode::Full => {
+                "WARNING: All environment variable values are shown in \
+                cleartext in stack responses."
+            }
+        };
+
         ServerInfo {
-            instructions: Some(
+            instructions: Some(format!(
                 "Portainer stack management server. Manages Docker Compose stacks on a Portainer instance.\n\
-                 \n\
-                 Recommended workflow:\n\
-                 1. Call list_endpoints first to get the endpoint_id for your environment.\n\
-                 2. Call list_stacks to see available stacks.\n\
-                 3. Use get_stack or get_stack_file to inspect a stack.\n\
-                 4. Use create/update/delete/start/stop/redeploy tools to manage stacks.\n\
-                 5. Use portainer_request for any Portainer API endpoint not covered above."
-                    .into(),
-            ),
+                     \n\
+                     Recommended workflow:\n\
+                     1. Call list_endpoints first to get the endpoint_id for your environment.\n\
+                     2. Call list_stacks to see available stacks.\n\
+                     3. Use get_stack or get_stack_file to inspect a stack.\n\
+                     4. Use create/update/delete/start/stop/redeploy tools to manage stacks.\n\
+                     5. Use portainer_request for any Portainer API endpoint not covered above.\n\
+                     \n\
+                     Environment variable display mode: {label}. {mode_note}",
+                label = mode.label(),
+                mode_note = mode_note,
+            )),
             capabilities: ServerCapabilities::builder()
                 .enable_tools()
                 .enable_prompts()
@@ -703,7 +909,8 @@ impl ServerHandler for PortainerServer {
                 }],
             })
         } else if uri == "portainer://stacks" {
-            let stacks = self.client.list_stacks(None).await.map_err(err)?;
+            let mut stacks = self.client.list_stacks(None).await.map_err(err)?;
+            redact::redact_stacks(&mut stacks, &self.redact_config);
             let text = serde_json::to_string_pretty(&stacks)
                 .map_err(|e| err(format!("JSON serialization failed: {e}")))?;
             Ok(ReadResourceResult {
@@ -736,7 +943,8 @@ impl ServerHandler for PortainerServer {
                 let id: i64 = rest.parse().map_err(|_| {
                     McpError::invalid_params(format!("Invalid stack ID: {rest}"), None)
                 })?;
-                let stack = self.client.get_stack(id).await.map_err(err)?;
+                let mut stack = self.client.get_stack(id).await.map_err(err)?;
+                redact::redact_stack(&mut stack, &self.redact_config);
                 let text = serde_json::to_string_pretty(&stack)
                     .map_err(|e| err(format!("JSON serialization failed: {e}")))?;
                 Ok(ReadResourceResult {
