@@ -40,7 +40,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2.8.2 zizmor: ignore[cache-poisoning]
+      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # zizmor: ignore[cache-poisoning]
         with:
           key: ${{ matrix.target }}
           save-if: false
