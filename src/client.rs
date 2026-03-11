@@ -42,6 +42,20 @@ impl PortainerClient {
         }
     }
 
+    pub fn with_config(url: &str, api_key: &str, insecure: bool) -> Self {
+        let base_url = url.trim_end_matches('/').to_string();
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .danger_accept_invalid_certs(insecure)
+            .build()
+            .expect("failed to build HTTP client");
+        Self {
+            client,
+            base_url,
+            api_key: api_key.to_string(),
+        }
+    }
+
     fn request(&self, method: Method, path: &str) -> RequestBuilder {
         let url = format!("{}/api/{}", self.base_url, path.trim_start_matches('/'));
         self.client

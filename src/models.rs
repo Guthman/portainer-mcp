@@ -1,7 +1,15 @@
 use std::collections::HashMap;
 
 use rmcp::schemars::{self, JsonSchema};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+fn null_as_empty_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<Vec<T>>::deserialize(deserializer).map(|opt| opt.unwrap_or_default())
+}
 
 // ── Response models ──────────────────────────────────────────────────────────
 
@@ -26,7 +34,7 @@ pub struct Stack {
     pub updated_by: String,
     #[serde(rename = "UpdateDate")]
     pub update_date: i64,
-    #[serde(rename = "Env")]
+    #[serde(rename = "Env", deserialize_with = "null_as_empty_vec")]
     pub env: Vec<EnvVar>,
     #[serde(rename = "GitConfig")]
     pub git_config: Option<GitConfig>,
