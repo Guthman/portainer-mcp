@@ -146,6 +146,7 @@ Add to your `.mcp.json`:
 
 ## Roadmap
 
+- Support for multiple Portainer API versions
 - Automatic tool updates when new Portainer API versions are released
 - Support for more auth methods or credential handling? Better prompts? Let me know!
 
