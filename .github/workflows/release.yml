@@ -36,15 +36,23 @@ jobs:
           - runner: ubuntu-latest
             target: x86_64-unknown-linux-musl
             archive: tar.gz
+            use_cross: false
+          - runner: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            archive: tar.gz
+            use_cross: true
           - runner: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
+            use_cross: false
           - runner: macos-latest
             target: x86_64-apple-darwin
             archive: tar.gz
+            use_cross: false
           - runner: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
+            use_cross: false
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -64,8 +72,25 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Install cross
+        if: matrix.use_cross
+        env:
+          CROSS_VERSION: v0.2.5
+        run: |
+          curl -sSfL "https://github.com/cross-rs/cross/releases/download/${CROSS_VERSION}/cross-x86_64-unknown-linux-gnu.tar.gz" \
+            | sudo tar xz -C /usr/local/bin
+
+      - name: Build (cross)
+        if: matrix.use_cross
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cross build --release --target "${TARGET}"
+
+      - name: Build (cargo)
+        if: ${{ !matrix.use_cross }}
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo build --release --target "${TARGET}"
 
       - name: Package (Unix)
         if: matrix.archive == 'tar.gz'
@@ -86,6 +111,15 @@ jobs:
           cd "target/${TARGET}/release"
           7z a "../../../portainer-stacks-${REF_NAME}-${TARGET}.zip" portainer-stacks.exe
 
+      - name: Upload binary for Docker build
+        if: contains(matrix.target, 'linux-musl')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binary-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/portainer-stacks
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
@@ -95,3 +129,71 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           files: portainer-stacks-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
+
+  docker:
+    name: Docker image
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Download amd64 binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: binary-x86_64-unknown-linux-musl
+          path: bin-amd64
+
+      - name: Download arm64 binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: binary-aarch64-unknown-linux-musl
+          path: bin-arm64
+
+      - name: Stage binaries for build context
+        run: |
+          mv bin-amd64/portainer-stacks portainer-stacks-amd64
+          mv bin-arm64/portainer-stacks portainer-stacks-arm64
+          chmod +x portainer-stacks-amd64 portainer-stacks-arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ghcr.io/guthman/portainer-mcp
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-name: ghcr.io/guthman/portainer-mcp
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

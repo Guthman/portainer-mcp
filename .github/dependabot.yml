@@ -43,3 +43,20 @@ updates:
       default-days: 7
       semver-major-days: 7
     open-pull-requests-limit: 5
+
+  # ──────────────────────────────────────────────
+  # Docker base image — weekly, Monday
+  # ──────────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      timezone: "Europe/Amsterdam"
+    commit-message:
+      prefix: "chore(deps):"
+    labels:
+      - "dependencies"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
