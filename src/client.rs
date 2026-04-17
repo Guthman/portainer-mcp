@@ -268,6 +268,48 @@ impl PortainerClient {
         serde_json::from_str(&body).map_err(|e| format!("failed to parse endpoints: {e}"))
     }
 
+    /// Restart a container. Returns `Ok(())` on success (HTTP 204).
+    pub async fn restart_container(
+        &self,
+        endpoint_id: i64,
+        container_id: &str,
+        timeout: Option<i32>,
+    ) -> Result<(), String> {
+        let path = format!("endpoints/{endpoint_id}/docker/containers/{container_id}/restart");
+        let mut req = self.request(Method::POST, &path);
+        if let Some(t) = timeout {
+            req = req.query(&[("t", t.to_string())]);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format!("request failed: {e}"))?;
+        Self::check_response(resp).await?;
+        Ok(())
+    }
+
+    /// Recreate a container, optionally pulling its image first.
+    ///
+    /// Uses Portainer's native recreate endpoint (`/api/docker/...`), not the
+    /// Docker Engine proxy (`/api/endpoints/.../docker/...`).
+    pub async fn recreate_container(
+        &self,
+        endpoint_id: i64,
+        container_id: &str,
+        body: &RecreateContainerBody,
+    ) -> Result<serde_json::Value, String> {
+        let path = format!("docker/{endpoint_id}/containers/{container_id}/recreate");
+        let resp = self
+            .request(Method::POST, &path)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("request failed: {e}"))?;
+        let resp_body = Self::check_response(resp).await?;
+        serde_json::from_str(&resp_body)
+            .map_err(|e| format!("failed to parse recreate response: {e}"))
+    }
+
     /// Make a generic API request for any Portainer endpoint not covered by typed methods.
     pub async fn raw_request(
         &self,

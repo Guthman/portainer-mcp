@@ -1,6 +1,6 @@
 # portainer-stacks
 
-An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose stacks on a [Portainer](https://www.portainer.io/) instance. Built against the Portainer 2.39.0 API spec. Exposes 10 typed tools for common stack operations plus a generic fallback for full API access.
+An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose stacks on a [Portainer](https://www.portainer.io/) instance. Built against the Portainer 2.39.0 API spec. Exposes 12 typed tools for common stack and container operations plus a generic fallback for full API access.
 
 > For broader Portainer coverage beyond stack management, see the official [portainer/portainer-mcp](https://github.com/portainer/portainer-mcp).
 
@@ -17,6 +17,7 @@ An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose st
 
 - List, inspect, create, update, and delete compose stacks
 - Start, stop, and git-redeploy stacks
+- Restart or recreate individual Docker containers (with optional image re-pull)
 - List environments/endpoints
 - Generic request tool for any Portainer API endpoint — if a dedicated tool doesn't cover your use case, the fallback `portainer_request` tool gives full access to the entire Portainer API
 - API key authentication (no login flow needed)
@@ -135,6 +136,8 @@ Add to your `.mcp.json`:
 | `start_stack` | Start a stopped stack |
 | `stop_stack` | Stop a running stack |
 | `redeploy_git_stack` | Redeploy a git-based stack (pull latest and redeploy) |
+| `restart_container` | Restart a running Docker container |
+| `recreate_container` | Recreate a container (destroy + create), optionally re-pulling its image |
 | `portainer_request` | Generic API request for any Portainer endpoint |
 
 ### Typical workflow

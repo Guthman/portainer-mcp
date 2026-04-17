@@ -366,7 +366,7 @@ impl PortainerServer {
 
     /// Make a generic Portainer API request for endpoints not covered by other tools.
     #[tool(
-        description = "Make a generic Portainer API request. Use this for any endpoint not covered by the specific tools above.\n\nWARNING: Responses are returned as-is with no env var redaction. Avoid querying endpoints that return sensitive data.\n\nArgs:\n  method: HTTP method (GET, POST, PUT, DELETE, PATCH).\n  path: API path after /api/, e.g. \"status\" or \"endpoints/1/docker/containers/json\".\n  body: Optional JSON request body.\n  query_params: Optional query string parameters.\n\nReturns: JSON with status_code, headers, and body from the API response.",
+        description = "Make a generic Portainer API request. Use this for any endpoint not covered by the specific tools above.\n\nWARNING: Responses are returned as-is with no env var redaction. Avoid querying endpoints that return sensitive data.\n\nReturns JSON with status_code, headers, and body from the API response.",
         annotations(
             read_only_hint = false,
             destructive_hint = true,
@@ -390,6 +390,57 @@ impl PortainerServer {
             .map_err(err)?;
         let text = serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string());
         Ok(CallToolResult::success(vec![Content::text(text)]))
+    }
+
+    /// Restart a running Docker container.
+    #[tool(
+        name = "restart_container",
+        description = "Restart a running Docker container. The container is stopped and started again, keeping the same container ID, volumes, and configuration.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = true
+        )
+    )]
+    async fn restart_container(
+        &self,
+        Parameters(params): Parameters<RestartContainerParams>,
+    ) -> Result<CallToolResult, McpError> {
+        self.client
+            .restart_container(params.endpoint_id, &params.container_id, params.timeout)
+            .await
+            .map_err(err)?;
+        success_json(&serde_json::json!({
+            "status": "restarted",
+            "container": params.container_id,
+        }))
+    }
+
+    /// Recreate a Docker container, optionally re-pulling its image.
+    #[tool(
+        name = "recreate_container",
+        description = "Recreate a Docker container. The existing container is removed and a new one is created using the same configuration. Non-persisted data will be lost.\n\nOptionally re-pull the image before recreating (pull_image=true) to pick up newer image tags.",
+        annotations(
+            read_only_hint = false,
+            destructive_hint = true,
+            idempotent_hint = false,
+            open_world_hint = true
+        )
+    )]
+    async fn recreate_container(
+        &self,
+        Parameters(params): Parameters<RecreateContainerParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let body = RecreateContainerBody {
+            pull_image: params.pull_image.unwrap_or(false),
+        };
+        let result = self
+            .client
+            .recreate_container(params.endpoint_id, &params.container_id, &body)
+            .await
+            .map_err(err)?;
+        success_json(&result)
     }
 }
 
@@ -831,7 +882,8 @@ impl ServerHandler for PortainerServer {
                  2. Call list_stacks to see available stacks.\n\
                  3. Use get_stack or get_stack_file to inspect a stack.\n\
                  4. Use create/update/delete/start/stop/redeploy tools to manage stacks.\n\
-                 5. Use portainer_request for any Portainer API endpoint not covered above.\n\
+                 5. Use restart_container or recreate_container to manage individual Docker containers.\n\
+                 6. Use portainer_request for any Portainer API endpoint not covered above.\n\
                  \n\
                  Environment variable display mode: {label}. {mode_note}",
             label = mode.label(),

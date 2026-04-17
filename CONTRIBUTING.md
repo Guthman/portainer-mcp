@@ -30,9 +30,9 @@ This project uses [semantic versioning](https://semver.org/). Releases are autom
 ### Steps
 
 1. **Decide the version bump:**
-   - **Patch** (`0.3.0` -> `0.3.1`) — bug fixes, dependency patches with no behavior change
-   - **Minor** (`0.3.0` -> `0.4.0`) — new features, non-breaking dependency upgrades, new tools
-   - **Major** (`0.3.0` -> `1.0.0`) — breaking changes to the MCP tool interface or configuration
+   - **Patch** (`0.4.0` -> `0.4.1`) — bug fixes, dependency patches with no behavior change
+   - **Minor** (`0.4.0` -> `0.5.0`) — new features, non-breaking dependency upgrades, new tools
+   - **Major** (`0.4.0` -> `1.0.0`) — breaking changes to the MCP tool interface or configuration
 
 2. **Update the version in `Cargo.toml`:**
    ```sh

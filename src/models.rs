@@ -244,6 +244,28 @@ pub struct DeployGuideParams {
     pub endpoint_id: i64,
 }
 
+/// Parameters for restarting a Docker container.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RestartContainerParams {
+    /// Environment/endpoint identifier.
+    pub endpoint_id: i64,
+    /// Container ID or name.
+    pub container_id: String,
+    /// Seconds to wait before killing the container (Docker stop timeout).
+    pub timeout: Option<i32>,
+}
+
+/// Parameters for recreating a Docker container.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RecreateContainerParams {
+    /// Environment/endpoint identifier.
+    pub endpoint_id: i64,
+    /// Container ID or name.
+    pub container_id: String,
+    /// Re-pull the container's image before recreating. Defaults to false.
+    pub pull_image: Option<bool>,
+}
+
 /// An environment variable with name and value.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EnvVarInput {
@@ -297,4 +319,11 @@ pub struct RedeployGitStackBody {
     pub repository_reference_name: Option<String>,
     #[serde(rename = "PullImage", skip_serializing_if = "Option::is_none")]
     pub pull_image: Option<bool>,
+}
+
+/// Request body for recreating a container with an image pull.
+#[derive(Debug, Serialize)]
+pub struct RecreateContainerBody {
+    #[serde(rename = "PullImage")]
+    pub pull_image: bool,
 }
