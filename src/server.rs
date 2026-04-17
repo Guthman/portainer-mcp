@@ -170,8 +170,12 @@ impl PortainerServer {
     }
 
     /// Update an existing stack's compose file, environment, or settings.
+    ///
+    /// When `stack_file_content` or `env` is omitted, the current values are
+    /// automatically fetched from the existing stack and preserved in the update
+    /// request, preventing accidental data loss.
     #[tool(
-        description = "Update an existing stack.\n\nArgs:\n  id: Stack identifier.\n  endpoint_id: Environment/endpoint ID.\n  stack_file_content: New compose file content.\n  env: Environment variables [{name, value}, ...].\n  prune: Prune services no longer referenced.\n  pull_image: Force repull images and redeploy.\n  rollback_to: Stack file version to rollback to.\n\nReturns: The updated stack object.",
+        description = "Update an existing stack.\n\nWhen stack_file_content or env is omitted, the current values are automatically preserved (fetched from the existing stack). This prevents accidental data loss.\n\nArgs:\n  id: Stack identifier.\n  endpoint_id: Environment/endpoint ID.\n  stack_file_content: New compose file content. If omitted, the current compose file is preserved.\n  env: Environment variables [{name, value}, ...]. If omitted, current env vars are preserved.\n  prune: Prune services no longer referenced.\n  pull_image: Force repull images and redeploy.\n  rollback_to: Stack file version to rollback to.\n\nReturns: The updated stack object.",
         annotations(
             read_only_hint = false,
             destructive_hint = false,
@@ -183,9 +187,44 @@ impl PortainerServer {
         &self,
         Parameters(params): Parameters<UpdateStackParams>,
     ) -> Result<CallToolResult, McpError> {
+        // Auto-preserve: fetch current state for any omitted fields so the
+        // Portainer API doesn't silently clear them.
+        let needs_env = params.env.is_none();
+        let needs_file = params.stack_file_content.is_none() && params.rollback_to.is_none();
+
+        let mut resolved_file = params.stack_file_content;
+        let mut resolved_env = params.env;
+
+        if needs_env || needs_file {
+            if needs_env {
+                let current_stack = self.client.get_stack(params.id).await.map_err(err)?;
+                resolved_env = Some(
+                    current_stack
+                        .env
+                        .into_iter()
+                        .filter_map(|ev| {
+                            Some(EnvVarInput {
+                                name: ev.name?,
+                                value: ev.value.unwrap_or_default(),
+                            })
+                        })
+                        .collect(),
+                );
+            }
+
+            if needs_file {
+                let current_file = self
+                    .client
+                    .get_stack_file(params.id, None, None)
+                    .await
+                    .map_err(err)?;
+                resolved_file = Some(current_file.stack_file_content);
+            }
+        }
+
         let body = UpdateStackBody {
-            stack_file_content: params.stack_file_content,
-            env: params.env,
+            stack_file_content: resolved_file,
+            env: resolved_env,
             prune: params.prune,
             pull_image: params.pull_image,
             rollback_to: params.rollback_to,
