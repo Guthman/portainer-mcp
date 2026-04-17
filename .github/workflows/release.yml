@@ -82,12 +82,14 @@ jobs:
 
       - name: Build (cross)
         if: matrix.use_cross
+        shell: bash
         env:
           TARGET: ${{ matrix.target }}
         run: cross build --release --target "${TARGET}"
 
       - name: Build (cargo)
         if: ${{ !matrix.use_cross }}
+        shell: bash
         env:
           TARGET: ${{ matrix.target }}
         run: cargo build --release --target "${TARGET}"
