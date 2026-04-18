@@ -25,6 +25,20 @@ An [MCP](https://modelcontextprotocol.io/) server for managing Docker Compose st
 
 ## Installation
 
+### Docker (easiest)
+
+A multi-arch image (`linux/amd64`, `linux/arm64`) is published to GHCR. No local install step — just reference it from your MCP client config (see [Usage](#usage)).
+
+```sh
+docker pull ghcr.io/guthman/portainer-mcp:latest
+```
+
+Pin to a specific version for reproducibility, e.g. `ghcr.io/guthman/portainer-mcp:0.4.1`.
+
+### Pre-built binaries
+
+Check [Releases](https://github.com/Guthman/portainer-mcp/releases) for pre-built binaries (Windows, Linux musl, macOS — both x86_64 and arm64).
+
 ### From source
 
 ```sh
@@ -34,10 +48,6 @@ cargo build --release
 ```
 
 The binary will be at `target/release/portainer-stacks` (or `portainer-stacks.exe` on Windows).
-
-### Pre-built binaries
-
-Check [Releases](https://github.com/Guthman/portainer-mcp/releases) for pre-built binaries.
 
 ### Verifying what you run
 
@@ -81,6 +91,36 @@ In `filtered` mode, names matching built-in patterns (PASSWORD, SECRET, TOKEN, e
 Use the `configure-env-display` prompt to scan your stacks and get personalized guidance.
 
 ## Usage
+
+### Via Docker
+
+The same config works for any MCP host (Claude Desktop, Claude Code, Cursor, VS Code, etc.). Docker must be installed and running on the machine where the MCP client launches the server.
+
+```json
+{
+  "mcpServers": {
+    "portainer": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "PORTAINER_URL",
+        "-e", "PORTAINER_API_KEY",
+        "-e", "PORTAINER_INSECURE",
+        "-e", "PORTAINER_ENV_DISPLAY",
+        "ghcr.io/guthman/portainer-mcp:latest"
+      ],
+      "env": {
+        "PORTAINER_URL": "https://your-portainer:9443",
+        "PORTAINER_API_KEY": "your-api-key",
+        "PORTAINER_INSECURE": "true",
+        "PORTAINER_ENV_DISPLAY": "masked"
+      }
+    }
+  }
+}
+```
+
+The `-i` flag is required (MCP speaks over stdio). `--rm` cleans up the container when the client disconnects. Forwarding env vars via `-e NAME` (without `=value`) pulls them from the `env` block above — keeping secrets out of `args`, where some hosts may log them.
 
 ### With Claude Desktop
 
