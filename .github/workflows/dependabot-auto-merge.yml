@@ -1,0 +1,101 @@
+name: Dependabot Auto-merge
+
+on:
+  pull_request_target:
+    branches: [ "master" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-approve and enable auto-merge
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Decide eligibility
+        id: decide
+        env:
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEPS_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
+        run: |
+          set -euo pipefail
+          eligible=false
+
+          # Auto-merge patch + minor for these ecosystems. Major bumps stay manual
+          # (breaking-change risk). Two safety nets cover these merges:
+          #   1. The `master-required-checks` ruleset blocks any PR whose CI and
+          #      security checks are red — `gh pr merge --auto` waits for them,
+          #      so a broken bump never lands.
+          #   2. dependabot.yml sets a 7-day `cooldown` on every ecosystem, so a
+          #      freshly-published (possibly compromised) release is not pulled
+          #      in until it has been public for a week.
+          #
+          # github_actions : CI config only, low blast radius.
+          # cargo          : Rust deps; this is a deployed binary, not a
+          #                  published library, so a bad bump's blast radius is
+          #                  our own CI/runtime.
+          # docker         : base-image bumps, gated by the CI build and Trivy
+          #                  scans.
+          #
+          # update-type semantics:
+          #   * Single-dependency PRs carry a resolved top-level UPDATE_TYPE
+          #     (version-update:semver-{patch,minor,major}).
+          #   * Grouped PRs (github-actions and cargo each use a `*` group in
+          #     dependabot.yml) and docker digest pins report an EMPTY top-level
+          #     UPDATE_TYPE — fetch-metadata cannot collapse a group into one
+          #     level. For those we judge the per-dependency list in DEPS_JSON
+          #     and stay eligible only when NO member is a semver-major bump.
+          #     Digest pins have a null per-entry updateType, correctly treated
+          #     as not-major.
+          has_major() {
+            # true (exit 0) iff any updated dependency is a semver-major bump.
+            local majors
+            majors=$(printf '%s' "$DEPS_JSON" \
+              | jq '[.[] | select(.updateType == "version-update:semver-major")] | length' \
+              2>/dev/null || echo 1)
+            [[ "$majors" -gt 0 ]]
+          }
+
+          case "$ECOSYSTEM" in
+            cargo|github_actions|docker)
+              if [[ "$UPDATE_TYPE" == "version-update:semver-patch" || \
+                    "$UPDATE_TYPE" == "version-update:semver-minor" ]]; then
+                eligible=true
+              else
+                # Resolved major, or empty level (grouped PRs, digest pins):
+                # judge per-dependency.
+                n=$(printf '%s' "$DEPS_JSON" | jq 'length' 2>/dev/null || echo 0)
+                if [[ "$n" -gt 0 ]] && ! has_major; then
+                  eligible=true
+                fi
+              fi
+              ;;
+          esac
+
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "ecosystem=$ECOSYSTEM update-type=$UPDATE_TYPE eligible=$eligible deps=$DEPS_JSON"
+
+      - name: Approve PR
+        if: steps.decide.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: gh pr review "$PR_URL" --approve --body "Auto-approved by dependabot-auto-merge workflow (ecosystem=${ECOSYSTEM}, update-type=${UPDATE_TYPE})."
+
+      - name: Enable auto-merge
+        if: steps.decide.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --auto --squash
