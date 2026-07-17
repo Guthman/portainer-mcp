@@ -3,10 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use rmcp::{
     ErrorData as McpError, ServerHandler,
-    handler::server::{
-        router::{prompt::PromptRouter, tool::ToolRouter},
-        wrapper::Parameters,
-    },
+    handler::server::wrapper::Parameters,
     model::{
         AnnotateAble, CallToolResult, Content, GetPromptRequestParams, GetPromptResult,
         ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, LoggingLevel,
@@ -28,8 +25,6 @@ use crate::redact::{self, EnvDisplayMode, RedactConfig};
 /// Implements [`ServerHandler`] from rmcp and communicates over stdio using JSON-RPC.
 #[derive(Clone)]
 pub struct PortainerServer {
-    tool_router: ToolRouter<Self>,
-    prompt_router: PromptRouter<Self>,
     client: PortainerClient,
     log_level: Arc<RwLock<Option<LoggingLevel>>>,
     redact_config: RedactConfig,
@@ -68,8 +63,6 @@ impl Default for PortainerServer {
 impl PortainerServer {
     pub fn new() -> Self {
         Self {
-            tool_router: Self::tool_router(),
-            prompt_router: Self::prompt_router(),
             client: PortainerClient::new(),
             log_level: Arc::new(RwLock::new(None)),
             redact_config: RedactConfig::from_env(),
