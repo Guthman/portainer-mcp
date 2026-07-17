@@ -1,0 +1,8 @@
+rules:
+  # pull_request_target is the GitHub-documented pattern for Dependabot auto-merge
+  # (write token needed to approve + enable auto-merge). Our usage is safe: no
+  # actions/checkout of PR code, and all PR-sourced values are passed via env:
+  # vars (never interpolated into shell via ${{ }}).
+  dangerous-triggers:
+    ignore:
+      - dependabot-auto-merge.yml
