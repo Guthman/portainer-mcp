@@ -1,3 +1,6 @@
+// rmcp 2.x deprecates MCP logging (SEP-2577); we keep supporting it until it is removed.
+#![allow(deprecated)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, RwLock};
 
@@ -5,11 +8,10 @@ use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::wrapper::Parameters,
     model::{
-        AnnotateAble, CallToolResult, Content, GetPromptRequestParams, GetPromptResult,
-        ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, LoggingLevel,
-        LoggingMessageNotificationParam, PaginatedRequestParams, PromptMessage, PromptMessageRole,
-        RawResource, RawResourceTemplate, ReadResourceRequestParams, ReadResourceResult,
-        ResourceContents, ServerCapabilities, ServerInfo, SetLevelRequestParams,
+        CallToolResult, ContentBlock, GetPromptResult, ListResourceTemplatesResult,
+        ListResourcesResult, LoggingLevel, LoggingMessageNotificationParam, PaginatedRequestParams,
+        PromptMessage, ReadResourceRequestParams, ReadResourceResult, Resource, ResourceContents,
+        ResourceTemplate, Role, ServerCapabilities, ServerInfo, SetLevelRequestParams,
     },
     prompt, prompt_handler, prompt_router,
     service::{Peer, RequestContext, RoleServer},
@@ -33,7 +35,7 @@ pub struct PortainerServer {
 fn success_json<T: serde::Serialize>(value: &T) -> Result<CallToolResult, McpError> {
     let text = serde_json::to_string_pretty(value)
         .map_err(|e| McpError::internal_error(format!("JSON serialization failed: {e}"), None))?;
-    Ok(CallToolResult::success(vec![Content::text(text)]))
+    Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
 }
 
 fn err(msg: String) -> McpError {
@@ -249,7 +251,7 @@ impl PortainerServer {
             .delete_stack(params.id, params.endpoint_id, params.remove_volumes)
             .await
             .map_err(err)?;
-        Ok(CallToolResult::success(vec![Content::text(format!(
+        Ok(CallToolResult::success(vec![ContentBlock::text(format!(
             "Stack {} deleted successfully.",
             params.id
         ))]))
@@ -382,7 +384,7 @@ impl PortainerServer {
             .await
             .map_err(err)?;
         let text = serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string());
-        Ok(CallToolResult::success(vec![Content::text(text)]))
+        Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
     }
 
     /// Restart a running Docker container.
@@ -505,11 +507,10 @@ impl PortainerServer {
              6. Best practices (image tags, restart policies, health checks)"
         );
 
-        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
-            PromptMessageRole::User,
-            message,
-        )])
-        .with_description("Troubleshoot a Portainer stack"))
+        Ok(
+            GetPromptResult::new(vec![PromptMessage::new_text(Role::User, message)])
+                .with_description("Troubleshoot a Portainer stack"),
+        )
     }
 
     #[prompt(
@@ -558,11 +559,10 @@ impl PortainerServer {
             params.endpoint_id
         );
 
-        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
-            PromptMessageRole::User,
-            message,
-        )])
-        .with_description("Guide for deploying a new stack"))
+        Ok(
+            GetPromptResult::new(vec![PromptMessage::new_text(Role::User, message)])
+                .with_description("Guide for deploying a new stack"),
+        )
     }
 
     #[prompt(
@@ -733,11 +733,10 @@ impl PortainerServer {
             note = note_section,
         );
 
-        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
-            PromptMessageRole::User,
-            message,
-        )])
-        .with_description("Scan environment variables and guide security configuration"))
+        Ok(
+            GetPromptResult::new(vec![PromptMessage::new_text(Role::User, message)])
+                .with_description("Scan environment variables and guide security configuration"),
+        )
     }
 
     #[prompt(
@@ -800,11 +799,10 @@ impl PortainerServer {
              3. Recommendations for improvements or issues to address"
         );
 
-        Ok(GetPromptResult::new(vec![PromptMessage::new_text(
-            PromptMessageRole::User,
-            message,
-        )])
-        .with_description("Full infrastructure overview"))
+        Ok(
+            GetPromptResult::new(vec![PromptMessage::new_text(Role::User, message)])
+                .with_description("Full infrastructure overview"),
+        )
     }
 }
 
@@ -827,11 +825,9 @@ impl PortainerServer {
         };
         if log_level_ordinal(level) >= log_level_ordinal(min_level) {
             let _ = peer
-                .notify_logging_message(LoggingMessageNotificationParam {
-                    level,
-                    logger: Some(logger.to_string()),
-                    data,
-                })
+                .notify_logging_message(
+                    LoggingMessageNotificationParam::new(level, data).with_logger(logger),
+                )
                 .await;
         }
     }
@@ -897,15 +893,13 @@ impl ServerHandler for PortainerServer {
         )
         .await;
 
-        let endpoints = RawResource::new("portainer://endpoints", "endpoints")
+        let endpoints = Resource::new("portainer://endpoints", "endpoints")
             .with_description("All environments/endpoints")
-            .with_mime_type("application/json")
-            .no_annotation();
+            .with_mime_type("application/json");
 
-        let stacks = RawResource::new("portainer://stacks", "stacks")
+        let stacks = Resource::new("portainer://stacks", "stacks")
             .with_description("All stacks")
-            .with_mime_type("application/json")
-            .no_annotation();
+            .with_mime_type("application/json");
 
         Ok(ListResourcesResult::with_all_items(vec![endpoints, stacks]))
     }
@@ -923,16 +917,14 @@ impl ServerHandler for PortainerServer {
         )
         .await;
 
-        let stack = RawResourceTemplate::new("portainer://stacks/{stack_id}", "stack")
+        let stack = ResourceTemplate::new("portainer://stacks/{stack_id}", "stack")
             .with_description("Single stack details")
-            .with_mime_type("application/json")
-            .no_annotation();
+            .with_mime_type("application/json");
 
         let compose =
-            RawResourceTemplate::new("portainer://stacks/{stack_id}/compose", "stack-compose")
+            ResourceTemplate::new("portainer://stacks/{stack_id}/compose", "stack-compose")
                 .with_description("Stack compose file")
-                .with_mime_type("application/x-yaml")
-                .no_annotation();
+                .with_mime_type("application/x-yaml");
 
         Ok(ListResourceTemplatesResult::with_all_items(vec![
             stack, compose,
