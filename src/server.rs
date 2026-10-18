@@ -359,7 +359,7 @@ impl PortainerServer {
 
     /// Make a generic Portainer API request for endpoints not covered by other tools.
     #[tool(
-        description = "Make a generic Portainer API request. Use this for any endpoint not covered by the specific tools above.\n\nWARNING: Responses are returned as-is with no env var redaction. Avoid querying endpoints that return sensitive data.\n\nReturns JSON with status_code, headers, and body from the API response.",
+        description = "Make a generic Portainer API request. Use this for any endpoint not covered by the specific tools above.\n\nEnvironment variable values in the response (e.g. Docker Config.Env, stack Env) are redacted using the same display mode as the stack tools. All other fields are returned as-is, so avoid endpoints that expose secrets elsewhere (e.g. container archives, exec output).\n\nReturns JSON with status_code, headers, and body from the API response.",
         annotations(
             read_only_hint = false,
             destructive_hint = true,
@@ -371,7 +371,7 @@ impl PortainerServer {
         &self,
         Parameters(params): Parameters<GenericRequestParams>,
     ) -> Result<CallToolResult, McpError> {
-        let result = self
+        let mut result = self
             .client
             .raw_request(
                 &params.method,
@@ -381,6 +381,9 @@ impl PortainerServer {
             )
             .await
             .map_err(err)?;
+        if let Some(body) = result.get_mut("body") {
+            redact::redact_json(body, &self.redact_config);
+        }
         let text = serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string());
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
@@ -719,8 +722,9 @@ impl PortainerServer {
              Names are flagged if they contain: `PASSWORD`, `PASSWD`, `SECRET`, `TOKEN`, \
              `CREDENTIAL`, `PRIVATE_KEY`, `API_KEY`, `DATABASE_URL`, `CONNECTION_STRING` \
              — or end with `_KEY` or `_DSN`.\n\n\
-             **Note:** The generic `portainer_request` tool returns raw API responses and \
-             does not apply redaction.\n\n\
+             **Note:** The generic `portainer_request` tool applies the same mode to env \
+             var lists in raw API responses (e.g. Docker `Config.Env`). Other fields are \
+             returned as-is.\n\n\
              Please review the scan results and advise:\n\
              1. Are any \"not flagged\" variables actually sensitive and should be added to \
              `PORTAINER_SENSITIVE_NAMES`?\n\
