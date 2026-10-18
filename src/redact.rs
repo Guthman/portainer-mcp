@@ -1,10 +1,12 @@
-//! Environment variable redaction for stack responses.
+//! Environment variable redaction for stack and raw API responses.
 //!
 //! Controls how env var values appear in tool outputs and resources.
 //! Configured via `PORTAINER_ENV_DISPLAY`, `PORTAINER_SENSITIVE_NAMES`,
 //! and `PORTAINER_VISIBLE_NAMES` environment variables.
 
 use std::collections::HashSet;
+
+use serde_json::Value;
 
 use crate::models::Stack;
 
@@ -154,25 +156,24 @@ fn matches_sensitive_pattern(lower: &str) -> bool {
 
 // ── Redaction ───────────────────────────────────────────────────────────────
 
+/// Placeholder that replaces the value of the variable `name`, or `None` to
+/// leave it visible. A missing name is treated as sensitive.
+fn placeholder(name: Option<&str>, config: &RedactConfig) -> Option<&'static str> {
+    match config.mode() {
+        EnvDisplayMode::Full => None,
+        EnvDisplayMode::Masked => Some("[MASKED]"),
+        EnvDisplayMode::Filtered => match name {
+            Some(name) if !config.should_redact(name) => None,
+            _ => Some("[REDACTED]"),
+        },
+    }
+}
+
 /// Redact environment variable values in a single stack.
 pub fn redact_stack(stack: &mut Stack, config: &RedactConfig) {
-    match config.mode() {
-        EnvDisplayMode::Full => {}
-        EnvDisplayMode::Masked => {
-            for var in &mut stack.env {
-                var.value = Some("[MASKED]".to_string());
-            }
-        }
-        EnvDisplayMode::Filtered => {
-            for var in &mut stack.env {
-                let should_redact = match &var.name {
-                    Some(name) => config.should_redact(name),
-                    None => true, // unknown name — assume sensitive
-                };
-                if should_redact {
-                    var.value = Some("[REDACTED]".to_string());
-                }
-            }
+    for var in &mut stack.env {
+        if let Some(p) = placeholder(var.name.as_deref(), config) {
+            var.value = Some(p.to_string());
         }
     }
 }
@@ -184,6 +185,77 @@ pub fn redact_stacks(stacks: &mut [Stack], config: &RedactConfig) {
     }
     for stack in stacks {
         redact_stack(stack, config);
+    }
+}
+
+/// Object keys (lowercase) whose value is a list of environment variables.
+///
+/// `env` covers Docker container/service/task specs (`Config.Env`,
+/// `ContainerSpec.Env`), Portainer stacks, and Kubernetes container specs;
+/// `envvars` covers Portainer edge stacks.
+const ENV_KEYS: &[&str] = &["env", "envvars"];
+
+/// Redact environment variable values anywhere in a raw JSON API response.
+///
+/// Walks the whole document and redacts every list stored under an
+/// [`ENV_KEYS`] key, in either of the shapes the Portainer API passes through:
+/// Docker's `["NAME=value", ...]` or `[{"name": ..., "value": ...}, ...]`
+/// (Portainer pairs, Kubernetes `EnvVar`).
+pub fn redact_json(value: &mut Value, config: &RedactConfig) {
+    if config.mode() == EnvDisplayMode::Full {
+        return;
+    }
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                if ENV_KEYS.contains(&key.to_ascii_lowercase().as_str())
+                    && let Value::Array(items) = child
+                {
+                    for item in items.iter_mut() {
+                        redact_env_entry(item, config);
+                    }
+                }
+                redact_json(child, config);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                redact_json(item, config);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Redact a single entry of an env list.
+fn redact_env_entry(entry: &mut Value, config: &RedactConfig) {
+    match entry {
+        // A bare "NAME" without "=" carries no value.
+        Value::String(s) => {
+            if let Some((name, _)) = s.split_once('=')
+                && let Some(p) = placeholder(Some(name), config)
+            {
+                *s = format!("{name}={p}");
+            }
+        }
+        Value::Object(map) => {
+            let name = ["name", "Name"]
+                .iter()
+                .find_map(|k| map.get(*k))
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let Some(p) = placeholder(name.as_deref(), config) else {
+                return;
+            };
+            for key in ["value", "Value"] {
+                if let Some(v) = map.get_mut(key)
+                    && !v.is_null()
+                {
+                    *v = Value::String(p.to_string());
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -358,5 +430,98 @@ mod tests {
         };
         redact_stack(&mut stack, &cfg);
         assert_eq!(stack.env[0].value.as_deref(), Some("[REDACTED]"));
+    }
+
+    #[test]
+    fn json_docker_inspect_filtered() {
+        let cfg = config_with_mode(EnvDisplayMode::Filtered);
+        let mut body = serde_json::json!({
+            "Id": "abc",
+            "Config": {
+                "Env": ["DB_PASSWORD=hunter2", "LOG_LEVEL=debug", "URL=a=b", "BARE"]
+            }
+        });
+        redact_json(&mut body, &cfg);
+        assert_eq!(
+            body["Config"]["Env"],
+            serde_json::json!([
+                "DB_PASSWORD=[REDACTED]",
+                "LOG_LEVEL=debug",
+                "URL=a=b",
+                "BARE"
+            ])
+        );
+    }
+
+    #[test]
+    fn json_masked_mode_hides_all_values() {
+        let cfg = config_with_mode(EnvDisplayMode::Masked);
+        let mut body = serde_json::json!({
+            "Config": { "Env": ["LOG_LEVEL=debug", "EMPTY="] }
+        });
+        redact_json(&mut body, &cfg);
+        assert_eq!(
+            body["Config"]["Env"],
+            serde_json::json!(["LOG_LEVEL=[MASKED]", "EMPTY=[MASKED]"])
+        );
+    }
+
+    #[test]
+    fn json_nested_in_arrays() {
+        let cfg = config_with_mode(EnvDisplayMode::Filtered);
+        // Swarm services list: Spec.TaskTemplate.ContainerSpec.Env
+        let mut body = serde_json::json!([{
+            "Spec": { "TaskTemplate": { "ContainerSpec": {
+                "Env": ["GITHUB_TOKEN=ghp_x"]
+            }}}
+        }]);
+        redact_json(&mut body, &cfg);
+        assert_eq!(
+            body[0]["Spec"]["TaskTemplate"]["ContainerSpec"]["Env"][0],
+            "GITHUB_TOKEN=[REDACTED]"
+        );
+    }
+
+    #[test]
+    fn json_name_value_pairs() {
+        let cfg = config_with_mode(EnvDisplayMode::Filtered);
+        let mut body = serde_json::json!({
+            // Portainer stack
+            "Env": [
+                { "name": "API_KEY", "value": "k" },
+                { "name": "TZ", "value": "UTC" },
+                { "value": "nameless" }
+            ],
+            // Portainer edge stack
+            "EnvVars": [{ "name": "DB_PASSWORD", "value": "p" }],
+            // Kubernetes container: valueFrom has no value to hide
+            "env": [
+                { "name": "SECRET_REF", "valueFrom": { "secretKeyRef": { "name": "s" } } }
+            ]
+        });
+        redact_json(&mut body, &cfg);
+        assert_eq!(body["Env"][0]["value"], "[REDACTED]");
+        assert_eq!(body["Env"][1]["value"], "UTC");
+        assert_eq!(body["Env"][2]["value"], "[REDACTED]");
+        assert_eq!(body["EnvVars"][0]["value"], "[REDACTED]");
+        assert!(body["env"][0].get("value").is_none());
+        assert_eq!(body["env"][0]["valueFrom"]["secretKeyRef"]["name"], "s");
+    }
+
+    #[test]
+    fn json_full_mode_and_other_keys_untouched() {
+        let mut body = serde_json::json!({
+            "Env": ["DB_PASSWORD=hunter2"],
+            "Labels": { "DB_PASSWORD": "not-an-env-list" },
+            "Cmd": ["--token=abc"]
+        });
+        let original = body.clone();
+        redact_json(&mut body, &config_with_mode(EnvDisplayMode::Full));
+        assert_eq!(body, original);
+
+        redact_json(&mut body, &config_with_mode(EnvDisplayMode::Filtered));
+        assert_eq!(body["Env"][0], "DB_PASSWORD=[REDACTED]");
+        assert_eq!(body["Labels"], original["Labels"]);
+        assert_eq!(body["Cmd"], original["Cmd"]);
     }
 }

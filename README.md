@@ -78,7 +78,7 @@ Set these environment variables:
 
 ### Environment variable display modes
 
-Stack objects returned by the Portainer API include environment variables that often contain secrets (passwords, API keys, tokens, connection strings). By default, all values are masked before they reach the LLM.
+Stack objects and Docker container inspect output include environment variables that often contain secrets (passwords, API keys, tokens, connection strings). By default, all values are masked before they reach the LLM. The same mode applies to env var lists in `portainer_request` responses (Docker `Config.Env`, Swarm service specs, stack and edge stack env, Kubernetes container `env`); other fields in those responses are returned as-is.
 
 | Mode | Behavior |
 |------|----------|
