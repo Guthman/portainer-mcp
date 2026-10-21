@@ -9,7 +9,7 @@ keywords = ["mcp", "portainer", "portainer-ce", "portainer-be"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-rmcp = { version = "2.2", features = ["server", "macros", "transport-io"] }
+rmcp = { version = "3.5", features = ["server", "macros", "transport-io"] }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
 serde = { version = "1", features = ["derive"] }
@@ -24,7 +24,7 @@ codegen-units = 1
 strip = true
 
 [dev-dependencies]
-testcontainers = "0.27"
+testcontainers = "0.28"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.13", features = ["json", "form"] }
 serde = { version = "1", features = ["derive"] }
